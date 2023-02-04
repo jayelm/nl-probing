@@ -2,8 +2,9 @@
 
 import os
 import os.path as osp
-from typing import Dict, Optional, Tuple
+from typing import Optional
 
+import h5py
 import hydra
 import numpy as np
 import torch
@@ -12,8 +13,12 @@ from omegaconf import DictConfig, OmegaConf
 from torch import nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import (AutoModelForSequenceClassification, AutoTokenizer,
-                          DataCollatorWithPadding, PreTrainedTokenizer)
+from transformers import (
+    AutoModelForSequenceClassification,
+    AutoTokenizer,
+    DataCollatorWithPadding,
+    PreTrainedTokenizer,
+)
 
 from . import data
 
@@ -46,15 +51,31 @@ def masked_average(x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
 
 
 @torch.no_grad()
-def get_hidden_features(
+def save_hidden_features(
     model: nn.Module,
     tokenizer: PreTrainedTokenizer,
     dataset: Dataset,
+    split: str,
+    hdf5_file: h5py.File,
     args: DictConfig,
     desc: Optional[str] = None,
-) -> Dict[str, np.ndarray]:
-    """Extract average hidden states for all layers from a model."""
-    all_hidden_states = []
+) -> None:
+    """Extract average hidden states from a model and save them to HDF5.
+
+    Args:
+        model: Model to extract hidden states from. Should return model_outputs
+            with a hidden_states attribute.
+        tokenizer: Tokenizer to use to tokenize the dataset.
+        split: Name of the split. Used to name the dataset in the HDF5 file.
+        hdf5_file: HDF5 file to save the hidden states to. Will create a new
+            dataset with the name `split`.
+        args: Arguments passed through hydra config.
+        desc: Optional to use for tqdm progress bar.
+    """
+    # h5py output
+    output_dataset = None
+    output_i = 0
+
     dataloader = DataLoader(
         dataset,
         batch_size=args.batch_size,
@@ -86,9 +107,17 @@ def get_hidden_features(
 
         # Move back to CPU
         hidden_states_avg = hidden_states_avg.cpu()
-        all_hidden_states.append(hidden_states_avg)
-    all_hidden_states = torch.cat(all_hidden_states, dim=0).numpy()
-    return all_hidden_states
+
+        # Save to hdf5 file.
+        if output_dataset is None:
+            # Create dataset and infer size from first batch.
+            output_dataset = hdf5_file.create_dataset(
+                split, (len(dataset), *hidden_states_avg.shape[1:]), dtype=np.float32
+            )
+        output_dataset[output_i : output_i + len(hidden_states_avg)] = hidden_states_avg
+        output_i += len(hidden_states_avg)
+
+    assert output_i == len(dataset)
 
 
 @hydra.main(config_path="conf", config_name="generate_hidden_config")
@@ -104,16 +133,15 @@ def main(args: DictConfig) -> None:
     # Load data
     datasets = data.load(args, tokenizer)
 
-    os.makedirs(args.output_dir, exist_ok=True)
+    os.makedirs(osp.split(args.output_file)[0], exist_ok=True)
+    f = h5py.File(args.output_file, "w")
+
     for split in args.data.splits:
         if split not in datasets:
             raise ValueError(f"Split {split} not found in datasets.")
-        split_dataset = datasets[split]
-        features = get_hidden_features(
-            model, tokenizer, split_dataset, args, desc=split
+        save_hidden_features(
+            model, tokenizer, datasets[split], split, f, args, desc=split
         )
-        output_file = osp.join(args.output_dir, f"{split}.npy")
-        np.save(output_file, features)
 
 
 if __name__ == "__main__":
