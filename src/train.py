@@ -49,8 +49,7 @@ def train(dataloader, model, criterion, optimizer, args):
         #decoder_input = torch.zeros(len(x[0]), device=args.device)
         x_tensor = torch.tensor(x).unsqueeze(0).to(args.device)
         #x_tensor = torch.tensor(x).to(args.device)
-        x_tensor_size = x_tensor.size()
-        decoder_hidden = (x_tensor, torch.zeros(x_tensor_size, device=args.device))
+        decoder_hidden = (x_tensor, x_tensor)
 
         for t in range(y_tensor.shape[1]): 
             decoder_output, decoder_hidden = model(decoder_input, decoder_hidden)
@@ -70,13 +69,13 @@ def train(dataloader, model, criterion, optimizer, args):
 
 @hydra.main(config_path="conf", config_name="train_probing_config")
 def main(args: DictConfig) -> None:
-    #tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
+    tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+    tokenizer.add_special_tokens({'pad_token': '[PAD]'})
     explanation_dataset = data.load_explanation(args, tokenizer)
     for split in args.data.splits:
         encoder_states = data.load_encoder_states(args, split)
         exp_dataset = explanation_dataset[split]
-        model = lstm_probing(input_size=1, hidden_size=args.hidden_size, device=args.device)
+        model = lstm_probing(input_size=encoder_states.shape[2], hidden_size=args.hidden_size, device=args.device)
         #model = Model(encoder_states, input_size=encoder_states.shape[2])
 
         train_iterations(encoder_states, exp_dataset, model, args)
