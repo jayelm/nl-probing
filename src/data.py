@@ -74,7 +74,6 @@ def load_encoder_states(args: DictConfig, split):
     hf = h5py.File(args.encoder_states, "r")
     dataset = hf[split][:]
     hf.close()
-    #dataset = HDF5Dataset(args.encoder_states, split)
     return dataset
 
 def load_explanation(args: DictConfig, tokenizer: AutoTokenizer) -> DatasetDict:

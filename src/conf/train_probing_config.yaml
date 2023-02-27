@@ -18,11 +18,8 @@ data:
   splits:
     - test
 encoder_states: hidden_states/nli-deberta-v3-base_on_esnli.hdf5
-batch_size: 12
+batch_size: 4
 device: cuda
 learning_rate: 0.0001
-plot_every: 10
-max_epochs: 10
-sequence_length: 4
-hidden_size: 768
-target_len: 20
+plot_every: 2
+max_epochs: 6

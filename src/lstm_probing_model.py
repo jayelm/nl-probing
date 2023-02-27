@@ -7,7 +7,7 @@ SOS_token = 0
 class lstm_probing(nn.Module):
     ''' Decodes hidden state output by encoder '''
     
-    def __init__(self, input_size, hidden_size, device, num_layers = 1):
+    def __init__(self, input_size, hidden_size, device, output_size, num_layers = 1):
 
         '''
         : param input_size:     the number of features in the input X
@@ -21,27 +21,48 @@ class lstm_probing(nn.Module):
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         self.device = device
+        self.output_size = output_size
 
-        self.lstm = nn.LSTM(input_size = input_size, hidden_size = hidden_size,
-                            num_layers = 1)
-        self.linear = nn.Linear(hidden_size, input_size)           
+        self.h_projection = nn.Linear(in_features=self.input_size, out_features=self.input_size, bias=False)
+        self.c_projection = nn.Linear(in_features=self.input_size, out_features=self.input_size, bias=False)
 
-    def forward(self, x_input, encoder_hidden_states):
+        self.lstm = nn.LSTMCell(input_size = 1 + self.hidden_size, hidden_size = self.hidden_size, bias=True)
+        self.linear = nn.Linear(self.hidden_size, self.output_size)           
+
+    def forward(self, y_input, encoder_hidden_states):
         
         '''        
-        : param x_input:                    should be 2D (batch_size, input_size)
+        : param y_input:                    should be 2D (batch_size, input_size)
         : param encoder_hidden_states:      hidden states
         : return output, hidden:            output gives all the hidden states in the sequence;
         :                                   hidden gives the hidden state and cell state for the last
         :                                   element in the sequence 
  
         '''
-        lstm_out, self.hidden = self.lstm(x_input.unsqueeze(0), encoder_hidden_states)
-        print(lstm_out)
-        print(lstm_out.shape)
-        output = self.linear(lstm_out.squeeze(0)).type(torch.LongTensor).to(self.device)     
-        return output, self.hidden
+        y_lengths = [len(s) for s in y_input]
+        init_hideen = self.h_projection(encoder_hidden_states)
+        init_cell = self.c_projection(encoder_hidden_states)
+        #y_input = torch.nn.utils.rnn.pack_padded_sequence(y_input, lengths=y_lengths, batch_first=True)
+        probe_output, enc_hiddens = self.probe(y_input, init_hideen, init_cell)
+        #enc_hiddens, lens_enc_hiddens = torch.nn.utils.rnn.pad_packed_sequence(enc_hiddens, batch_first=True)
+        logits = self.linear(probe_output)
+        logits = torch.permute(logits, (1, 2, 0)).to(self.device)
+        #scores = F.log_softmax(logits)
+        return logits   
+        #lstm_out, self.hidden = self.lstm(x_input.unsqueeze(0), encoder_hidden_states)
+        #output = self.linear(lstm_out.squeeze(0)).type(torch.LongTensor).to(self.device) 
+        #return output, enc_hiddens
 
+    def probe(self, explanation, decoder_hidden, decoder_cell):
+        output = []
+        for t in range(explanation.shape[1]): 
+            explanation_t = explanation[:, t].unsqueeze(1)
+            Ybar_t = torch.cat((explanation_t, decoder_hidden), -1)
+            decoder_hidden, decoder_cell = self.lstm(Ybar_t, (decoder_hidden, decoder_cell))
+            output.append(decoder_hidden)
+        output = torch.stack(output, dim=0)
+        return output, decoder_hidden
+            
 '''
 class Model(nn.Module):
     def __init__(self, dataset, input_size, hidden_size = 32, output_size = 32, num_layers = 1):
