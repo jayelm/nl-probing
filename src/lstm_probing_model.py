@@ -8,13 +8,6 @@ class lstm_probing(nn.Module):
     ''' Decodes hidden state output by encoder '''
     
     def __init__(self, input_size, hidden_size, device, output_size, num_layers = 1):
-
-        '''
-        : param input_size:     the number of features in the input X
-        : param hidden_size:    the number of features in the hidden state h
-        : param num_layers:     number of recurrent layers (i.e., 2 means there are
-        :                       2 stacked LSTMs)
-        '''
         
         super(lstm_probing, self).__init__()
         self.input_size = input_size
@@ -31,14 +24,6 @@ class lstm_probing(nn.Module):
 
     def forward(self, y_input, encoder_hidden_states):
         
-        '''        
-        : param y_input:                    should be 2D (batch_size, input_size)
-        : param encoder_hidden_states:      hidden states
-        : return output, hidden:            output gives all the hidden states in the sequence;
-        :                                   hidden gives the hidden state and cell state for the last
-        :                                   element in the sequence 
- 
-        '''
         y_lengths = [len(s) for s in y_input]
         init_hideen = self.h_projection(encoder_hidden_states)
         init_cell = self.c_projection(encoder_hidden_states)
