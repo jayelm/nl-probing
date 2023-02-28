@@ -80,7 +80,7 @@ def main(args: DictConfig) -> None:
     tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
     tokenizer_model = GPT2Model.from_pretrained("gpt2")
     tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.padding_side = 'left'
+    tokenizer.padding_side = 'right'
     tokenizer_model.resize_token_embeddings(len(tokenizer))
     #reverse_word_map = dict(map(reversed, tokenizer.word_index.items()))
     explanation_dataset = data.load_explanation(args, tokenizer)

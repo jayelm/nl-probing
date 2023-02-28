@@ -18,13 +18,16 @@ def evaluate(model, tokenizer, dataloader, args):
             probing_model_output = probing_model_output.argmax(dim=2)
             #topv, topi = probing_model_output.topk(1)
 
+            print(probing_model_output)
+
             for i in range(probing_model_output.shape[0]): # iterate over batch dimension
-                decoded_words.append(tokenizer.decode(probing_model_output[i]))
+                decoded_words.append(tokenizer.convert_ids_to_tokens(probing_model_output[i], skip_special_tokens=True))
 
-            targets = [list(map(tokenizer.decode, record)) for record in y]
+            targets = [list(tokenizer.convert_ids_to_tokens(record, skip_special_tokens=True)) for record in y]
 
-            bleu = bleu_score(decoded_words, targets)
+            bleu = bleu_score(decoded_words, targets, max_n=2, weights=[0.8, 0.2])
             print(bleu)
+
 
         return decoded_words, bleu
 
