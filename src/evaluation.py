@@ -1,18 +1,30 @@
-def evaluate(encoder, decoder, sentence):
+from lstm_probing_model import lstm_probing
+import torchtext
+import torch
+import numpy as np
+from torchtext.data.metrics import bleu_score
+
+def evaluate(model, tokenizer, dataloader, args):
+    model.eval()
     with torch.no_grad():
-        decoder_input = torch.tensor([[SOS_token]], device=device)  # SOS
-        decoder_hidden = encoder_hidden
-        decoded_words = []
+        for batch, (x, y) in enumerate(dataloader):
+            decoded_words = []
 
-        for di in range(max_length):
-            decoder_output, decoder_hidden, decoder_attention = decoder(decoder_input, decoder_hidden, encoder_outputs)
-            topv, topi = decoder_output.data.topk(1)
-            if topi.item() == EOS_token:
-                decoded_words.append('<EOS>')
-                break
-            else:
-                decoded_words.append(output_lang.index2word[topi.item()])
+            y_tensor = torch.tensor(np.asarray(y),  dtype = torch.long).to(args.device)
 
-            decoder_input = topi.squeeze().detach()
+            x_tensor = torch.tensor(x).to(args.device)
 
-        return decoded_words
+            probing_model_output = model(y_tensor, x_tensor)
+            probing_model_output = probing_model_output.argmax(dim=2)
+            #topv, topi = probing_model_output.topk(1)
+
+            for i in range(probing_model_output.shape[0]): # iterate over batch dimension
+                decoded_words.append(tokenizer.decode(probing_model_output[i]))
+
+            targets = [list(map(tokenizer.decode, record)) for record in y]
+
+            bleu = bleu_score(decoded_words, targets)
+            print(bleu)
+
+        return decoded_words, bleu
+

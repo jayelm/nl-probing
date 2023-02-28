@@ -38,15 +38,15 @@ class lstm_probing(nn.Module):
         #output = self.linear(lstm_out.squeeze(0)).type(torch.LongTensor).to(self.device) 
         #return output, enc_hiddens
 
-    def probe(self, explanation, decoder_hidden, decoder_cell):
+    def probe(self, explanation, probe_hidden, probe_cell):
         output = []
         for t in range(explanation.shape[1]): 
             explanation_t = explanation[:, t].unsqueeze(1)
-            Ybar_t = torch.cat((explanation_t, decoder_hidden), -1)
-            decoder_hidden, decoder_cell = self.lstm(Ybar_t, (decoder_hidden, decoder_cell))
-            output.append(decoder_hidden)
+            Ybar_t = torch.cat((explanation_t, probe_hidden), -1)
+            probe_hidden, probe_cell = self.lstm(Ybar_t, (probe_hidden, probe_cell))
+            output.append(probe_hidden)
         output = torch.stack(output, dim=0)
-        return output, decoder_hidden
+        return output, probe_hidden
             
 '''
 class Model(nn.Module):
