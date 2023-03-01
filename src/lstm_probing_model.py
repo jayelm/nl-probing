@@ -1,52 +1,42 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
 SOS_token = 0
 
 class lstm_probing(nn.Module):
     ''' Decodes hidden state output by encoder '''
     
-    def __init__(self, input_size, hidden_size, device, output_size, num_layers = 1):
+    def __init__(self, input_size, hidden_size, device, output_size):
         
         super(lstm_probing, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
-        self.num_layers = num_layers
         self.device = device
         self.output_size = output_size
 
         self.h_projection = nn.Linear(in_features=self.input_size, out_features=self.input_size, bias=False)
         self.c_projection = nn.Linear(in_features=self.input_size, out_features=self.input_size, bias=False)
 
-        self.lstm = nn.LSTMCell(input_size = 1 + self.hidden_size, hidden_size = self.hidden_size, bias=True)
+        #self.embedding = nn.Embedding(self.input_size, self.hidden_size)
+        self.lstm = nn.LSTM(input_size = 1, hidden_size=self.hidden_size, bias=True, batch_first=True)
         self.linear = nn.Linear(self.hidden_size, self.output_size)           
 
-    def forward(self, y_input, encoder_hidden_states):
+    def forward(self, y_input, seq_lengths, encoder_hidden_states):
+        #embedded = self.embedding(torch.tensor(y_input).to(self.device)).view(1, 1, -1)
+        #print(embedded)
+        #packed_input = pack_padded_sequence(embedded, seq_lengths, batch_first=True)
+        #print(packed_input)
+        output, hidden = self.lstm(y_input.unsqueeze(1).float(), encoder_hidden_states)
+        #output, _ = pad_packed_sequence(packed_output)
+        output = self.linear(output)
+        output = output.squeeze(1).float()
+        return output, hidden
         
-        y_lengths = [len(s) for s in y_input]
-        init_hideen = self.h_projection(encoder_hidden_states)
-        init_cell = self.c_projection(encoder_hidden_states)
-        #y_input = torch.nn.utils.rnn.pack_padded_sequence(y_input, lengths=y_lengths, batch_first=True)
-        probe_output, enc_hiddens = self.probe(y_input, init_hideen, init_cell)
-        #enc_hiddens, lens_enc_hiddens = torch.nn.utils.rnn.pad_packed_sequence(enc_hiddens, batch_first=True)
-        logits = self.linear(probe_output)
-        logits = torch.permute(logits, (1, 2, 0)).to(self.device)
-        #scores = F.log_softmax(logits)
-        return logits   
-        #lstm_out, self.hidden = self.lstm(x_input.unsqueeze(0), encoder_hidden_states)
-        #output = self.linear(lstm_out.squeeze(0)).type(torch.LongTensor).to(self.device) 
-        #return output, enc_hiddens
-
-    def probe(self, explanation, probe_hidden, probe_cell):
-        output = []
-        for t in range(explanation.shape[1]): 
-            explanation_t = explanation[:, t].unsqueeze(1)
-            Ybar_t = torch.cat((explanation_t, probe_hidden), -1)
-            probe_hidden, probe_cell = self.lstm(Ybar_t, (probe_hidden, probe_cell))
-            output.append(probe_hidden)
-        output = torch.stack(output, dim=0)
-        return output, probe_hidden
+    def init_hidden(self, encoder_hidden_states):
+        return (self.h_projection(encoder_hidden_states),
+                self.c_projection(encoder_hidden_states))
             
 '''
 class Model(nn.Module):

@@ -11,7 +11,7 @@ class TrainDataset(data.Dataset):
     def __getitem__(self, index):
         'Generates one sample of data'
         # Select sample
-        X = self.encoder_states[index][-1].squeeze().tolist()
+        X = torch.tensor(self.encoder_states[index][-1])
 
         # Load data and get label
         y = self.exp_dataset[index]['input_ids']

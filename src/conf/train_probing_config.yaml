@@ -17,7 +17,6 @@ data:
   dataset_config_name: null
   splits:
     - train
-    - test
 encoder_states: hidden_states/nli-deberta-v3-base_on_esnli.hdf5
 batch_size: 64
 device: cuda

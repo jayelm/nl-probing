@@ -53,27 +53,35 @@ def train_iterations(encoder_states, exp_dataset, tokenizer_length, args):
 
 
 def train(model, dataloader, criterion, encoder_states, epoch, optimizer, args):
-    # x dimension: (batch, seq_lenth=798)
+    # x dimension: (batch, 1, seq_lenth=768)
     # y dimension: (batch, seq_lenth=55)
     for batch, (x, y) in enumerate(dataloader):
+        x_tensor = torch.stack(list(x), dim=0).to(args.device)
+        x_tensor = x_tensor.unsqueeze(1).permute((1, 0, 2))
+
         loss = 0
-        y_tensor = torch.tensor(np.asarray(y),  dtype = torch.long).to(args.device)
+        y_tensor = torch.tensor(np.asarray(y)).to(args.device)
         optimizer.zero_grad()
 
-        x_tensor = torch.tensor(x).to(args.device)
+        hidden = model.init_hidden(x_tensor)
+        outputs = torch.zeros(y_tensor.shape[1], args.batch_size, model.output_size, device=args.device)
+        target_input = torch.zeros(y_tensor[:, 0].unsqueeze(1).shape).to(args.device)
 
-        probing_model_output = model(y_tensor, x_tensor)
-        loss = criterion(probing_model_output, y_tensor)
-        batch_loss = loss.item()
+        # Run the model for each timestep using teacher forcing
+        for t in range(y_tensor.shape[1]):
+            current_timestep_tensor = y_tensor[:, t]
+            output, hidden = model.forward(target_input, [y_tensor.shape[1]] * args.batch_size, hidden)
+            loss += criterion(output, current_timestep_tensor)
+            outputs[t] = output
+            target_input = current_timestep_tensor.unsqueeze(1)
+
         x_tensor.detach()
         y_tensor.detach()
-        probing_model_output.detach()
-
         loss.backward()
         optimizer.step()
 
-        print({ 'epoch': epoch, 'batch': batch, 'loss': batch_loss })
-        return batch_loss / args.batch_size
+        print({ 'epoch': epoch, 'batch': batch, 'loss': loss.item() })
+        return loss.item() / args.batch_size
 
 @hydra.main(config_path="conf", config_name="train_probing_config")
 def main(args: DictConfig) -> None:
@@ -88,7 +96,7 @@ def main(args: DictConfig) -> None:
         encoder_states = data.load_encoder_states(args, split)
         exp_dataset = explanation_dataset[split]
         model, dataloader = train_iterations(encoder_states, exp_dataset, len(tokenizer), args)
-        decoded_words, bleu_score = evaluate(model, tokenizer, dataloader, args)
+        decoded_words, bleu_score = evaluate(tokenizer, model, dataloader, args)
 
 if __name__ == "__main__":
     main()
