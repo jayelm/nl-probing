@@ -22,14 +22,14 @@ def load_esnli_explanation(args: DictConfig, tokenizer: PreTrainedTokenizer) -> 
         """
         features = tokenizer(
             examples["explanation_1"],
-            padding=True,
-            truncation=True,
         )
-        return features
+        input_ids = [1, *features['input_ids'], 2]
+        return {
+            "input_ids": input_ids
+        }
 
     datasets = datasets.map(
         tokenize_fn,
-        batched=True,
         desc="Tokenizing",
         remove_columns=datasets["train"].column_names,
     )
