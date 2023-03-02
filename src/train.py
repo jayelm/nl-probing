@@ -23,7 +23,7 @@ def train_iterations(encoder_states, exp_dataset, tokenizer_length, args):
 
     training_dataset = dataset.TrainDataset(encoder_states, exp_dataset)
     dataloader = DataLoader(training_dataset, batch_size=args.batch_size, collate_fn=collate_fn_decode)
-    model = lstm_probing(input_size=encoder_states.shape[2], hidden_size=encoder_states.shape[2], device=args.device, 
+    model = lstm_probing(input_size=tokenizer_length, hidden_size=encoder_states.shape[2], device=args.device, 
     output_size=tokenizer_length)
     model = model.to(args.device)
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
@@ -34,7 +34,6 @@ def train_iterations(encoder_states, exp_dataset, tokenizer_length, args):
     start = time.time()
 
     for epoch in range(1, args.max_epochs + 1):
-        model.train()
         loss = train(model, dataloader, criterion, encoder_states, epoch, optimizer, args)
         print_loss_total += loss
         plot_loss_total += loss
@@ -53,44 +52,32 @@ def train_iterations(encoder_states, exp_dataset, tokenizer_length, args):
 
 
 def train(model, dataloader, criterion, encoder_states, epoch, optimizer, args):
+    model.train()
     # x dimension: (batch, 1, seq_lenth=768)
     # y dimension: (batch, seq_lenth=55)
     for batch, (x, y) in enumerate(dataloader):
-        x_tensor = torch.stack(list(x), dim=0).to(args.device)
-        x_tensor = x_tensor.unsqueeze(1).permute((1, 0, 2))
+        x_tensor = torch.stack(list(x), dim=0).to(args.device)  # (batch, 768)
+        y_tensor = torch.stack(y, dim=0).to(args.device)  # (batch, 55)
 
-        loss = 0
-        y_tensor = torch.tensor(np.asarray(y)).to(args.device)
         optimizer.zero_grad()
 
-        hidden = model.init_hidden(x_tensor)
-        outputs = torch.zeros(y_tensor.shape[1], args.batch_size, model.output_size, device=args.device)
-        target_input = torch.zeros(y_tensor[:, 0].unsqueeze(1).shape).to(args.device)
+        hidden = model.init_hidden(x_tensor)  # (batch, 768), (batch, 768)
+        hidden = (hidden[0].unsqueeze(0), hidden[1].unsqueeze(0))
+        y_lengths = (y_tensor != 50256).long().sum(-1)
+        packed_logits, packed_targets = model.forward(y_tensor, y_lengths, hidden)
 
-        # Run the model for each timestep using teacher forcing
-        for t in range(y_tensor.shape[1]):
-            current_timestep_tensor = y_tensor[:, t]
-            output, hidden = model.forward(target_input, [y_tensor.shape[1]] * args.batch_size, hidden)
-            loss += criterion(output, current_timestep_tensor)
-            outputs[t] = output
-            target_input = current_timestep_tensor.unsqueeze(1)
-
-        x_tensor.detach()
-        y_tensor.detach()
+        loss = criterion(packed_logits, packed_targets)
+        
         loss.backward()
         optimizer.step()
 
         print({ 'epoch': epoch, 'batch': batch, 'loss': loss.item() })
-        return loss.item() / args.batch_size
+        return loss.item()
 
 @hydra.main(config_path="conf", config_name="train_probing_config")
 def main(args: DictConfig) -> None:
     tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
     tokenizer_model = GPT2Model.from_pretrained("gpt2")
-    tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.padding_side = 'right'
-    tokenizer_model.resize_token_embeddings(len(tokenizer))
-    #reverse_word_map = dict(map(reversed, tokenizer.word_index.items()))
     explanation_dataset = data.load_explanation(args, tokenizer)
     for split in args.data.splits:
         encoder_states = data.load_encoder_states(args, split)

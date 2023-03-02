@@ -20,7 +20,7 @@ data:
 encoder_states: hidden_states/nli-deberta-v3-base_on_esnli.hdf5
 batch_size: 64
 device: cuda
-learning_rate: 0.0001
+learning_rate: 0.001
 plot_every: 2
 print_every: 2
 max_epochs: 60

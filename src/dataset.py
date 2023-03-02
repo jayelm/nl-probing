@@ -14,6 +14,7 @@ class TrainDataset(data.Dataset):
         X = torch.tensor(self.encoder_states[index][-1])
 
         # Load data and get label
-        y = self.exp_dataset[index]['input_ids']
+        MAX_LEN = 100
+        y = torch.tensor([*self.exp_dataset[index]['input_ids'][:MAX_LEN], *([50256] * (MAX_LEN - len(self.exp_dataset[index]['input_ids'][:MAX_LEN])))])
 
         return X, y
