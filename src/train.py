@@ -56,32 +56,22 @@ def train(model, dataloader, criterion, encoder_states, epoch, optimizer, args):
     # x dimension: (batch, 1, seq_lenth=768)
     # y dimension: (batch, seq_lenth=55)
     for batch, (x, y) in enumerate(dataloader):
-        x_tensor = torch.stack(list(x), dim=0).to(args.device)
-        x_tensor = x_tensor.unsqueeze(1).permute((1, 0, 2))
-
-        loss = 0
-        y_tensor = torch.tensor(np.asarray(y)).to(args.device)
+        x_tensor = torch.stack(list(x), dim=0).to(args.device)  # (batch, 768)
+        y_tensor = torch.tensor(np.asarray(y)).to(args.device)  # (batch, 55)
         optimizer.zero_grad()
 
-        hidden = model.init_hidden(x_tensor)
-        outputs = torch.zeros(y_tensor.shape[1], args.batch_size, model.output_size, device=args.device)
-        target_input = torch.zeros(y_tensor[:, 0].unsqueeze(1).shape).to(args.device)
+        hidden = model.init_hidden(x_tensor)  # (batch, 768), (batch, 768)
+        hidden = (hidden[0].unsqueeze(0), hidden[1].unsqueeze(0))
+        y_lengths = (y_tensor != 50256).long().sum(-1)
+        packed_logits, packed_targets = model(y_tensor, y_lengths, hidden)
 
-        # Run the model for each timestep using teacher forcing
-        for t in range(y_tensor.shape[1]):
-            current_timestep_tensor = y_tensor[:, t]
-            output, hidden = model.forward(target_input, [y_tensor.shape[1]] * args.batch_size, hidden)
-            loss += criterion(output, current_timestep_tensor)
-            outputs[t] = output
-            target_input = current_timestep_tensor.unsqueeze(1)
+        loss = criterion(packed_logits, packed_targets)
 
-        x_tensor.detach()
-        y_tensor.detach()
         loss.backward()
         optimizer.step()
 
         print({ 'epoch': epoch, 'batch': batch, 'loss': loss.item() })
-        return loss.item() / args.batch_size
+        return loss.item()
 
 @hydra.main(config_path="conf", config_name="train_probing_config")
 def main(args: DictConfig) -> None:

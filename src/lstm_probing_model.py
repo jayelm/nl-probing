@@ -19,21 +19,31 @@ class lstm_probing(nn.Module):
         self.h_projection = nn.Linear(in_features=self.input_size, out_features=self.input_size, bias=False)
         self.c_projection = nn.Linear(in_features=self.input_size, out_features=self.input_size, bias=False)
 
-        #self.embedding = nn.Embedding(self.input_size, self.hidden_size)
-        self.lstm = nn.LSTM(input_size = 1, hidden_size=self.hidden_size, bias=True, batch_first=True)
+        # Use number of tokens in GPT-2 tokenizer.
+        self.embedding = nn.Embedding(50257, self.hidden_size)
+        self.lstm = nn.LSTM(input_size = self.hidden_size, hidden_size=self.hidden_size, bias=True, batch_first=True)
         self.linear = nn.Linear(self.hidden_size, self.output_size)           
 
     def forward(self, y_input, seq_lengths, encoder_hidden_states):
-        #embedded = self.embedding(torch.tensor(y_input).to(self.device)).view(1, 1, -1)
+        inputs = y_input[:, :-1]  # Feed in tokens at time t. We don't need to feed in the last token since we don't predict afterwards.
+        targets = y_input[:, 1:]  # Predict tokens at time t+1
+        predict_lengths = seq_lengths.cpu() - 1
+
+        embedded = self.embedding(inputs)  # (B, seq_len, hidden_size)
         #print(embedded)
-        #packed_input = pack_padded_sequence(embedded, seq_lengths, batch_first=True)
-        #print(packed_input)
-        output, hidden = self.lstm(y_input.unsqueeze(1).float(), encoder_hidden_states)
-        #output, _ = pad_packed_sequence(packed_output)
-        output = self.linear(output)
-        output = output.squeeze(1).float()
-        return output, hidden
-        
+        packed_input = pack_padded_sequence(embedded, predict_lengths, batch_first=True, enforce_sorted=False)
+        packed_output, _ = self.lstm(packed_input, encoder_hidden_states)
+
+        # Obtain logits for each next token.
+        packed_hidden_states = packed_output.data  # (however_many_tokens_in_batch, hidden_size)
+        packed_logits = self.linear(packed_hidden_states)  # (however_many_tokens_in_batch, vocab_size)
+
+        # Pack the targets in the same way, so the targets and hidden states align.
+        packed_targets = pack_padded_sequence(targets, predict_lengths, batch_first=True, enforce_sorted=False).data
+
+        return packed_logits, packed_targets
+
+
     def init_hidden(self, encoder_hidden_states):
         return (self.h_projection(encoder_hidden_states),
                 self.c_projection(encoder_hidden_states))
