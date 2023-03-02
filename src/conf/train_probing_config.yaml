@@ -1,0 +1,27 @@
+hydra:
+  run:
+    dir: .
+  sweep:
+    dir: .
+    subdir: .
+  job_logging:
+    root:
+      level: INFO
+  job:
+    env_set:
+      TOKENIZERS_PARALLELISM: "false"
+
+model_name_or_path: cross-encoder/nli-deberta-v3-base
+data:
+  dataset_name: esnli
+  dataset_config_name: null
+  splits:
+    - train
+    - test
+encoder_states: hidden_states/nli-deberta-v3-base_on_esnli.hdf5
+batch_size: 64
+device: cuda
+learning_rate: 0.0001
+plot_every: 2
+print_every: 2
+max_epochs: 60
