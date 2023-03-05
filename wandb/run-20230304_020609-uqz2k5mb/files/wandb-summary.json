@@ -1,1 +1,0 @@
-{"train_epoch": 100, "train_loss": 0.07481583207845688, "train_perplexity": 1.0776857137680054, "_timestamp": 1677928163.8496702, "_runtime": 3794.297306060791, "_step": 119, "eval_epoch": 100, "eval_loss": 8.826762199401855, "eval_perplexity": 6814.18798828125, "bleu_score": 0.007873892320792967, "_wandb": {"runtime": 3780}}
