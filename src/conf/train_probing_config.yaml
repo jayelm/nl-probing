@@ -25,5 +25,6 @@ device: cuda
 learning_rate: 0.001
 plot_every: 2
 print_every: 2
-max_epochs: 60
-training_model: train-2023-03-02_20
+evaluate_every: 5
+max_epochs: 100
+training_model: train-2023-03-04_02

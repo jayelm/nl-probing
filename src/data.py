@@ -20,12 +20,20 @@ def load_esnli_explanation(args: DictConfig, tokenizer: PreTrainedTokenizer) -> 
         - "attention_mask" which indicates which of the tokens in "input_ids"
             actually exist (1) and which are padding (0).
         """
-        features = tokenizer(
+        explanation1_features = tokenizer(
             examples["explanation_1"],
         )
-        input_ids = [1, *features['input_ids'], 2]
+        explanation2_features = tokenizer(
+            examples["explanation_2"],
+        )
+        explanation3_features = tokenizer(
+            examples["explanation_3"],
+        )
+        input_ids = [1, *explanation1_features['input_ids'], 2]
         return {
-            "input_ids": input_ids
+            "input_ids": input_ids, 
+            "explanation2": [*explanation2_features['input_ids']],
+            "explanation3": [*explanation3_features['input_ids']]
         }
 
     datasets = datasets.map(

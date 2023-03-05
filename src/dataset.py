@@ -1,7 +1,7 @@
 import torch
 from torch.utils import data
 
-class TrainDataset(data.Dataset):
+class CombinedDataset(data.Dataset):
     def __init__(self, encoder_states, exp_dataset):
         self.encoder_states = encoder_states
         self.exp_dataset = exp_dataset
@@ -16,5 +16,7 @@ class TrainDataset(data.Dataset):
         # Load data and get label
         MAX_LEN = 100
         y = torch.tensor([*self.exp_dataset[index]['input_ids'][:MAX_LEN], *([50256] * (MAX_LEN - len(self.exp_dataset[index]['input_ids'][:MAX_LEN])))])
+        y_2 = torch.tensor(self.exp_dataset[index]['explanation2'])
+        y_3 = torch.tensor(self.exp_dataset[index]['explanation2'])
 
-        return X, y
+        return X, y, y_2, y_3
