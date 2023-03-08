@@ -6,6 +6,7 @@ import numpy as np
 from torchtext.data.metrics import bleu_score
 import dataset
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 def collate_fn_decode(data):
     hidden_states, explanation, explanation_2, explanation_3 = zip(*data)
@@ -23,11 +24,11 @@ def evaluate(tokenizer, model, dataset, criterion, args):
     decoded_words = []
     reference_words = []
     with torch.no_grad():
-        for batch, (x, y, y_2, y_3) in enumerate(dataloader):
+        for batch, (x, y, y_2, y_3) in enumerate(tqdm(dataloader)):
             x_tensor = torch.stack(list(x), dim=0).to(args.device)  # (batch, 768)
             y_tensor = torch.stack(y, dim=0).to(args.device)  # (batch, 55)
             for i in range(len(x_tensor)):
-                input_token = torch.tensor([[1]]).to(args.device)
+                input_token = 1
                 hidden = model.init_hidden(x_tensor[i].unsqueeze(0))  # (batch, 768), (batch, 768)
                 hidden = (hidden[0].unsqueeze(0), hidden[1].unsqueeze(0))
 
@@ -39,8 +40,10 @@ def evaluate(tokenizer, model, dataset, criterion, args):
                         break
                     sequence.append(topi.item())
                     input_token = topi.item()
+                sequence = sequence[1:]
+                ref_1 = y[i][1:len(y[i])-2]
                 decoded_sequence = tokenizer.convert_ids_to_tokens(sequence, skip_special_tokens=True)
-                reference_1 = tokenizer.convert_ids_to_tokens(y[i], skip_special_tokens=True)
+                reference_1 = tokenizer.convert_ids_to_tokens(ref_1, skip_special_tokens=True)
                 reference_2 = tokenizer.convert_ids_to_tokens(y_2[i], skip_special_tokens=True)
                 reference_3 = tokenizer.convert_ids_to_tokens(y_3[i], skip_special_tokens=True)
                 overall_bleu += bleu_score([decoded_sequence], [[reference_1, reference_2, reference_3]], max_n=4, weights=[0.4, 0.4, 0.1, 0.1])

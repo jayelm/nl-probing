@@ -14,6 +14,7 @@ import dataset
 import util
 import datetime
 import wandb
+from tqdm import tqdm
 
 wandb.init(project='lstm-probing', entity='clairecheng')
 
@@ -69,7 +70,7 @@ def train(model, dataloader, criterion, epoch, optimizer, args):
     model.train()
     # x dimension: (batch, 1, seq_lenth=768)
     # y dimension: (batch, seq_lenth=55)
-    for batch, (x, y, y_2, y_3) in enumerate(dataloader):
+    for batch, (x, y, y_2, y_3) in enumerate(tqdm(dataloader)):
         x_tensor = torch.stack(list(x), dim=0).to(args.device)  # (batch, 768)
         y_tensor = torch.stack(y, dim=0).to(args.device)  # (batch, 55)
 
