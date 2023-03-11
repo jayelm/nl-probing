@@ -8,6 +8,11 @@ import h5py
 
 def load_esnli_explanation(args: DictConfig, tokenizer: PreTrainedTokenizer) -> DatasetDict:
     datasets = load_dataset(args.data.dataset_name, args.data.dataset_config_name)
+    '''
+    datasets['train'] = datasets['train'].select(range(1000))
+    datasets['validation'] = datasets['validation'].select(range(1000))
+    datasets['test'] = datasets['test'].select(range(1000))
+    '''
     def tokenize_fn(examples):
         """Use the tokenizer to tokenize the premise and the hypothesis.
 
@@ -81,6 +86,8 @@ def load_snli(args: DictConfig, tokenizer: PreTrainedTokenizer) -> DatasetDict:
 def load_encoder_states(args: DictConfig, split):
     hf = h5py.File(args.encoder_states, "r")
     dataset = hf[split][:]
+    #ind = list(range(0, 1000))
+    #dataset = hf[split][:][ind]
     hf.close()
     return dataset
 

@@ -3,24 +3,23 @@ from torch import nn
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
-SOS_token = 0
-
 class lstm_probing(nn.Module):
     ''' Decodes hidden state output by encoder '''
     
-    def __init__(self, input_size, hidden_size, device, output_size):
+    def __init__(self, input_size, hidden_size, lstm_hidden_size, device, output_size):
         
         super(lstm_probing, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
+        self.lstm_hidden_size = lstm_hidden_size
         self.device = device
         self.output_size = output_size
 
         self.h_projection = nn.Linear(in_features=self.hidden_size, out_features=self.hidden_size, bias=False)
         self.c_projection = nn.Linear(in_features=self.hidden_size, out_features=self.hidden_size, bias=False)
 
-        self.embedding = nn.Embedding(self.input_size, self.hidden_size)
-        self.lstm = nn.LSTM(input_size = self.hidden_size, hidden_size=self.hidden_size, bias=True, batch_first=True)
+        self.embedding = nn.Embedding(self.input_size, self.lstm_hidden_size)
+        self.lstm = nn.LSTM(input_size = self.lstm_hidden_size, hidden_size=self.hidden_size, bias=True, batch_first=True)
         self.linear = nn.Linear(self.hidden_size, self.output_size)           
 
     def forward(self, y_input, seq_lengths, encoder_hidden_states):

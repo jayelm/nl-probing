@@ -1,6 +1,7 @@
 from lstm_probing_model import lstm_probing
 import torchtext
 import torch
+import copy
 from torch import nn
 import numpy as np
 from torchtext.data.metrics import bleu_score
@@ -13,7 +14,7 @@ def collate_fn_decode(data):
     return hidden_states, explanation, explanation_2, explanation_3
 
 def evaluate(tokenizer, model, encoder_states, exp_dataset, args):
-    training_dataset = dataset.CombinedDataset(encoder_states, exp_dataset)
+    training_dataset = dataset.CombinedDataset(encoder_states, exp_dataset, args.layer)
     criterion = nn.CrossEntropyLoss()
     return evaluate(tokenizer, model, training_dataset, criterion, args)
 
@@ -41,14 +42,17 @@ def evaluate(tokenizer, model, dataset, criterion, args):
                     sequence.append(topi.item())
                     input_token = topi.item()
                 sequence = sequence[1:]
-                ref_1 = y[i][1:len(y[i])-2]
+                ref_1 = copy.deepcopy(list(y[i]))
+                ref_1.remove(1)
+                ref_1.remove(2)
                 decoded_sequence = tokenizer.convert_ids_to_tokens(sequence, skip_special_tokens=True)
                 reference_1 = tokenizer.convert_ids_to_tokens(ref_1, skip_special_tokens=True)
                 reference_2 = tokenizer.convert_ids_to_tokens(y_2[i], skip_special_tokens=True)
                 reference_3 = tokenizer.convert_ids_to_tokens(y_3[i], skip_special_tokens=True)
-                overall_bleu += bleu_score([decoded_sequence], [[reference_1, reference_2, reference_3]], max_n=4, weights=[0.4, 0.4, 0.1, 0.1])
+                overall_bleu += bleu_score([decoded_sequence], [[reference_1, reference_2, reference_3]], max_n=2, weights=[0.5, 0.5])
                 decoded_words.append(decoded_sequence)
                 reference_words.append([reference_1, reference_2, reference_3])
+            #overall_bleu += bleu_score(decoded_words, reference_words, max_n=2, weights=[0.5, 0.5])
             loss, perplexity = calculate_loss_and_perplexity(model, criterion, x_tensor, y_tensor, args)
         return decoded_words, reference_words, overall_bleu, loss, perplexity
 

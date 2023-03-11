@@ -2,6 +2,7 @@ import argparse
 import torch
 import time
 import hydra
+import pickle
 import numpy as np
 from omegaconf import DictConfig, OmegaConf
 from torch import nn, optim
@@ -24,21 +25,20 @@ def collate_fn_decode(data):
 
 def train_iterations(data, explanation_dataset, tokenizer, args):
     train_encoder_states = data.load_encoder_states(args, "train")
-    training_dataset = dataset.CombinedDataset(train_encoder_states, explanation_dataset['train'])
-    validation_dataset = dataset.CombinedDataset(data.load_encoder_states(args, "validation"), explanation_dataset['validation'])
+    training_dataset = dataset.CombinedDataset(train_encoder_states, explanation_dataset['train'], args.layer)
+    validation_dataset = dataset.CombinedDataset(data.load_encoder_states(args, "validation"), explanation_dataset['validation'], args.layer)
     dataloader = DataLoader(training_dataset, batch_size=args.batch_size, collate_fn=collate_fn_decode)
-    model = lstm_probing(input_size=len(tokenizer), hidden_size=train_encoder_states.shape[2], device=args.device, 
-            output_size=len(tokenizer))
+    model = lstm_probing(input_size=len(tokenizer), hidden_size=train_encoder_states.shape[2], lstm_hidden_size=args.lstm_hidden_size,
+    device=args.device, output_size=len(tokenizer))
     model = model.to(args.device)
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
     criterion = nn.CrossEntropyLoss()
     wandb.watch(model, criterion, log="all")
+    early_stopper = util.EarlyStopper(patience=3, min_delta=0)
     print_loss_total = 0 
     plot_loss_total = 0 
-    plot_losses = []
-    plot_perplexity = []
-    plot_epochs = []
     start = time.time()
+    best_bleu = 0
 
     for epoch in range(1, args.max_epochs + 1):
         loss, perplexity = train(model, dataloader, criterion, epoch, optimizer, args)
@@ -47,21 +47,25 @@ def train_iterations(data, explanation_dataset, tokenizer, args):
 
         if epoch % args.evaluate_every == 0:
             decoded_words, reference_words, bleu_score, loss, perplexity = evaluate(tokenizer, model, validation_dataset, criterion, args)
-            wandb.log({'eval_epoch': epoch, 'eval_loss': loss, 'eval_perplexity': perplexity, 'bleu_score': bleu_score / len(explanation_dataset['validation'])})
-            print({'eval_epoch': epoch, 'eval_loss': loss, 'eval_perplexity': perplexity, 'bleu_score': bleu_score / len(explanation_dataset['validation'])})
+            avg_bleu_score = bleu_score / len(explanation_dataset['validation'])
+            wandb.log({'eval_epoch': epoch, 'eval_loss': loss, 'eval_perplexity': perplexity, 'bleu_score': avg_bleu_score})
+            print({'eval_epoch': epoch, 'eval_loss': loss, 'eval_perplexity': perplexity, 'bleu_score': avg_bleu_score})
+            if avg_bleu_score > best_bleu:
+                torch.save(model.state_dict(), 'train-{date:%Y-%m-%d_%H}'.format( date=datetime.datetime.now()))
+                best_bleu = avg_bleu_score
+                name = 'validation' + '-{date:%Y-%m-%d_%H}'.format( date=datetime.datetime.now())
+                #np.savetxt('../results/'+name+'_decoded_words.txt', decoded_words, fmt='%s')
+                decoded_words_output = open('../results/'+name+'_decoded_words.pkl', 'wb')
+                pickle.dump(decoded_words, decoded_words_output)
+                decoded_words_output.close()
+            if early_stopper.early_stop(avg_bleu_score):             
+                break
 
         if epoch % args.print_every == 0:
             print_loss_avg = print_loss_total / args.print_every
             print_loss_total = 0
             print('%s (%d %d%%) %.4f' % (util.timeSince(start, epoch / args.max_epochs),
                                          epoch, epoch / args.max_epochs * 100, print_loss_avg))
-
-        if epoch % args.plot_every == 0:
-            plot_loss_avg = plot_loss_total / args.plot_every
-            plot_losses.append(plot_loss_avg)
-            plot_perplexity.append(np.exp(plot_loss_avg))
-            plot_loss_total = 0
-            plot_epochs.append(epoch)
     
     return model, dataloader
 
@@ -99,18 +103,20 @@ def main(args: DictConfig) -> None:
         print("======"+split+"======")
         if split == "train":
             model, dataloader = train_iterations(data, explanation_dataset, tokenizer, args)
-            torch.save(model.state_dict(), 'train-{date:%Y-%m-%d_%H}'.format( date=datetime.datetime.now()))
         if split == "test":
-            encoder_states = data.load_encoder_states(args, split)
-            model = lstm_probing(input_size=len(tokenizer), hidden_size=encoder_states.shape[2], device=args.device, 
-    output_size=len(tokenizer))
-            model.load_state_dict(torch.load(args.training_model))
-            model = model.to(args.device)
+            #model = lstm_probing(input_size=len(tokenizer), hidden_size=encoder_states.shape[2], device=args.device, 
+    #output_size=len(tokenizer))
+            #model.load_state_dict(torch.load(args.training_model))
+            #model = model.to(args.device)
+            test_dataset = dataset.CombinedDataset(data.load_encoder_states(args, "test"), explanation_dataset['test'], args.layer)
+            criterion = nn.CrossEntropyLoss()
             name = split + '-{date:%Y-%m-%d_%H}'.format( date=datetime.datetime.now())
-            decoded_words, reference_words, bleu_score, loss, perplexity = evaluate(tokenizer, model, encoder_states, explanation_dataset[split], args)
-            np.savetxt('../results/'+name+'_decoded_words.txt', decoded_words, fmt='%s')
-            np.savetxt('../results/'+name+'_reference_words.txt', reference_words, fmt='%s')
-            print({ 'bleu_score': bleu_score / len(exp_dataset), 'loss': loss, 'perplexity': torch.exp(loss) })
+            decoded_words, reference_words, bleu_score, loss, perplexity = evaluate(tokenizer, model, test_dataset, criterion, args)
+            #np.savetxt('../results/'+name+'_decoded_words.txt', decoded_words, fmt='%s')
+            decoded_words_output = open('../results/'+name+'_decoded_words.pkl', 'wb')
+            pickle.dump(decoded_words, decoded_words_output)
+            decoded_words_output.close()
+            print({ 'bleu_score': bleu_score / len(explanation_dataset['test']), 'loss': loss, 'perplexity': perplexity })
 
 if __name__ == "__main__":
     main()
