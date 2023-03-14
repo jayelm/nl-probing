@@ -9,21 +9,16 @@ import h5py
 def load_esnli_explanation(args: DictConfig, tokenizer: PreTrainedTokenizer) -> DatasetDict:
     datasets = load_dataset(args.data.dataset_name, args.data.dataset_config_name)
     '''
-    datasets['train'] = datasets['train'].select(range(1000))
-    datasets['validation'] = datasets['validation'].select(range(1000))
-    datasets['test'] = datasets['test'].select(range(1000))
+    datasets['train'] = datasets['train'].select(range(100))
+    datasets['validation'] = datasets['validation'].select(range(100))
+    datasets['test'] = datasets['test'].select(range(100))
     '''
     def tokenize_fn(examples):
-        """Use the tokenizer to tokenize the premise and the hypothesis.
+        """Use the tokenizer to tokenize the explanations.
 
-        Given a dictionary of examples where "premise" is a list of premises and
-        "hypothesis" is a list of hypotheses, tokenizer returns a dictionary
-        with keys:
         - "input_ids" corresponding to the tokenized explanation, separated by a [SEP] token.
         - "token_type_ids" which indicates which of the tokens in "input_ids"
-            correspond to premise (0) and hypothesis (1).
-        - "attention_mask" which indicates which of the tokens in "input_ids"
-            actually exist (1) and which are padding (0).
+            correspond to explanations.
         """
         explanation1_features = tokenizer(
             examples["explanation_1"],
@@ -86,7 +81,7 @@ def load_snli(args: DictConfig, tokenizer: PreTrainedTokenizer) -> DatasetDict:
 def load_encoder_states(args: DictConfig, split):
     hf = h5py.File(args.encoder_states, "r")
     dataset = hf[split][:]
-    #ind = list(range(0, 1000))
+    #ind = list(range(0, 100))
     #dataset = hf[split][:][ind]
     hf.close()
     return dataset

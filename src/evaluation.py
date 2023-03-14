@@ -9,14 +9,11 @@ import dataset
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+EOS_IDX = 2
+
 def collate_fn_decode(data):
     hidden_states, explanation, explanation_2, explanation_3 = zip(*data)
     return hidden_states, explanation, explanation_2, explanation_3
-
-def evaluate(tokenizer, model, encoder_states, exp_dataset, args):
-    training_dataset = dataset.CombinedDataset(encoder_states, exp_dataset, args.layer)
-    criterion = nn.CrossEntropyLoss()
-    return evaluate(tokenizer, model, training_dataset, criterion, args)
 
 def evaluate(tokenizer, model, dataset, criterion, args):
     dataloader = DataLoader(dataset, batch_size=args.batch_size, collate_fn=collate_fn_decode)
@@ -32,12 +29,13 @@ def evaluate(tokenizer, model, dataset, criterion, args):
                 input_token = 1
                 hidden = model.init_hidden(x_tensor[i].unsqueeze(0))  # (batch, 768), (batch, 768)
                 hidden = (hidden[0].unsqueeze(0), hidden[1].unsqueeze(0))
+                #hidden = (torch.permute(hidden[0], (1, 0, 2)), torch.permute(hidden[1], (1, 0, 2)))
 
                 sequence = [1]
                 for t in range(len(y[i])): 
                     output, hidden, logits = model.generate(torch.tensor([[input_token]]).to(args.device), hidden)
                     topv, topi = logits.topk(1)
-                    if topi.item() == 2: 
+                    if topi.item() == EOS_IDX: 
                         break
                     sequence.append(topi.item())
                     input_token = topi.item()
@@ -59,6 +57,7 @@ def evaluate(tokenizer, model, dataset, criterion, args):
 def calculate_loss_and_perplexity(model, criterion, x_tensor, y_tensor, args):
     hidden = model.init_hidden(x_tensor)  # (batch, 768), (batch, 768)
     hidden = (hidden[0].unsqueeze(0), hidden[1].unsqueeze(0))
+    #hidden = (torch.permute(hidden[0], (1, 0, 2)), torch.permute(hidden[1], (1, 0, 2)))
     y_lengths = (y_tensor != 50256).long().sum(-1)
     packed_logits, packed_targets = model.forward(y_tensor, y_lengths, hidden)
 
