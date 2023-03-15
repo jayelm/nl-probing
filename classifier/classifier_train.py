@@ -1,3 +1,6 @@
+"""
+Codebase modified from https://github.com/codistro/Articles/blob/main/covid_tweet_classification.ipynb
+"""
 from transformers import AutoTokenizer
 from datasets import load_dataset, load_metric
 from transformers import AutoModelForSequenceClassification
@@ -17,8 +20,9 @@ def tokenize_data(example):
     return tokenizer(example['explanation_1'], padding='max_length')
 
 def reshape_data(dataset):
-    remove_columns = ['premise', 'hypothesis', 'explanation_2', 'explanation_3']
-    dataset = dataset.map(tokenize_data, batched=True, remove_columns = remove_columns)
+    remove_columns = ['premise', 'hypothesis', 'explanation_1', 'explanation_2', 'explanation_3']
+    dataset = dataset.map(tokenize_data, batched=True, remove_columns = remove_columns, num_proc = torch.cuda.device_count())
+    dataset = dataset.rename_column('label', 'labels')
     return dataset
 
 def get_model():
@@ -33,8 +37,14 @@ def train(dataset, model):
     trainer = Trainer(
         model=model, args=training_args, train_dataset=train_dataset, eval_dataset=eval_dataset
     )
-    train_info = trainer.train()
-    print(train_info)
+    try:
+        model.load_state_dict(torch.load('../saved_states/model_state.pt'))
+        print("----Loaded Previously trained model----")
+    except:
+        print("----Training model from scratch----")
+        train_info = trainer.train()
+        torch.save(model.state_dict(), '../saved_states/model_state.pt')
+        print(train_info)
 
 def compute_metrics(eval_pred):
     metric = load_metric("accuracy")
@@ -60,9 +70,13 @@ def evaluate(model, dataset, metric):
     print(eval_info)
 
 def main():
+
+    print("Num cuda devices:")
+    print(torch.cuda.device_count())
     print("\n-------Setting up dataset-------\n")
     dataset = get_dataset()
     dataset = reshape_data(dataset)
+
     print("\n-------Setting up model-------\n")
     model = get_model()
     print("\n-------Training-------\n")
