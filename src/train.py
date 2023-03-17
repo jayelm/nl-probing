@@ -10,11 +10,12 @@ from torch.utils.data import DataLoader
 from lstm_probing_model import lstm_probing
 import data
 from evaluation import evaluate
-from transformers import GPT2Tokenizer, AutoTokenizer, GPT2Model
+from transformers import GPT2Tokenizer
 import dataset
 import util
 import datetime
 import wandb
+import copy
 from tqdm import tqdm
 
 def collate_fn_decode(data):
@@ -23,20 +24,22 @@ def collate_fn_decode(data):
 
 def train_iterations(data, explanation_dataset, tokenizer, run_params, args):
     train_encoder_states = data.load_encoder_states(args, "train")
-    training_dataset = dataset.CombinedDataset(train_encoder_states, explanation_dataset['train'], args.layer)
-    validation_dataset = dataset.CombinedDataset(data.load_encoder_states(args, "validation"), explanation_dataset['validation'], args.layer)
+    training_dataset = dataset.CombinedDataset("train", train_encoder_states, explanation_dataset['train'], args.layer)
+    validation_dataset = dataset.CombinedDataset("validation", data.load_encoder_states(args, "validation"), explanation_dataset['validation'], args.layer)
     dataloader = DataLoader(training_dataset, batch_size=args.batch_size, collate_fn=collate_fn_decode)
-    model = lstm_probing(input_size=len(tokenizer), hidden_size=train_encoder_states.shape[2], lstm_hidden_size=args.lstm_hidden_size,
-    device=args.device, output_size=len(tokenizer))
+    model = lstm_probing(input_size=len(tokenizer), hidden_size=train_encoder_states.shape[2], lstm_hidden_size=args.lstm_hidden_size,device=args.device, output_size=len(tokenizer))
     model = model.to(args.device)
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
+    scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.8)
     criterion = nn.CrossEntropyLoss()
     wandb.watch(model, criterion, log="all")
-    early_stopper = util.EarlyStopper(patience=3, min_delta=0)
+    early_stopper = util.EarlyStopper(patience=args.patience, min_delta=0)
     print_loss_total = 0 
     plot_loss_total = 0 
     start = time.time()
+    #smallest_loss = np.inf
     best_bleu = 0
+    best_model = model
 
     for epoch in range(1, args.max_epochs + 1):
         loss, perplexity = train(model, dataloader, criterion, epoch, optimizer, args)
@@ -53,8 +56,9 @@ def train_iterations(data, explanation_dataset, tokenizer, run_params, args):
                 model_name += run_params
                 print(model_name)
                 torch.save(model.state_dict(), model_name)
+                best_model = copy.deepcopy(model.state_dict())
                 best_bleu = avg_bleu_score
-            if early_stopper.early_stop(loss):             
+            if early_stopper.early_stop(avg_bleu_score):             
                 break
 
         if epoch % args.print_every == 0:
@@ -62,8 +66,9 @@ def train_iterations(data, explanation_dataset, tokenizer, run_params, args):
             print_loss_total = 0
             print('%s (%d %d%%) %.4f' % (util.timeSince(start, epoch / args.max_epochs),
                                          epoch, epoch / args.max_epochs * 100, print_loss_avg))
+        scheduler.step()
     
-    return model
+    return best_model
 
 
 def train(model, dataloader, criterion, epoch, optimizer, args):
@@ -72,6 +77,7 @@ def train(model, dataloader, criterion, epoch, optimizer, args):
     # y dimension: (batch, seq_lenth=55)
     for batch, (x, y, _, _) in enumerate(tqdm(dataloader)):
         x_tensor = torch.stack(list(x), dim=0).to(args.device)  # (batch, 768)
+        x_tensor = torch.normal(0, 1, size=x_tensor.shape).to(args.device)
         y_tensor = torch.stack(y, dim=0).to(args.device)  # (batch, 55)
 
         optimizer.zero_grad()
@@ -97,18 +103,18 @@ def main(args: DictConfig) -> None:
     for run in range(args.multi_run):
         tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
         explanation_dataset = data.load_explanation(args, tokenizer)
-        run_params = 'basic_probe-' + 'run' + str(run) + '-lr' + str(args.learning_rate) + '-hiddenSize' + str(args.lstm_hidden_size) + '-bottomlayer' + str(args.layer)
+        run_params = str(args.custom_string) + '-basic_probe-' + 'run' + str(run) + '-lr' + str(args.learning_rate) + '-hiddenSize' + str(args.lstm_hidden_size) + '-bottomlayer' + str(args.layer)
         wandb.init(project='lstm-probing', entity='clairecheng', name=run_params, reinit=True)
         for split in args.data.splits:
             print("======"+split+"======")
             if split == "train":
-                model = train_iterations(data, explanation_dataset, tokenizer, run_params, args)
+                best_model = train_iterations(data, explanation_dataset, tokenizer, run_params, args)
             if split == "validation" or split == "test":
-                #model = lstm_probing(input_size=len(tokenizer), hidden_size=encoder_states.shape[2], device=args.device, 
-        #output_size=len(tokenizer))
-                #model.load_state_dict(torch.load(args.training_model))
-                #model = model.to(args.device)
-                split_dataset = dataset.CombinedDataset(data.load_encoder_states(args, split), explanation_dataset[split], args.layer)
+                split_encoder_states = data.load_encoder_states(args, split)
+                model = lstm_probing(input_size=len(tokenizer), hidden_size=split_encoder_states.shape[2], lstm_hidden_size=args.lstm_hidden_size, device=args.device, output_size=len(tokenizer))
+                model.load_state_dict(best_model)
+                model = model.to(args.device)
+                split_dataset = dataset.CombinedDataset(split, split_encoder_states, explanation_dataset[split], args.layer)
                 criterion = nn.CrossEntropyLoss()
                 name = split + '-{date:%Y-%m-%d_%H}'.format( date=datetime.datetime.now())
                 decoded_words, reference_words, bleu_score, loss, perplexity = evaluate(tokenizer, model, split_dataset, criterion, args)

@@ -8,6 +8,7 @@ from torchtext.data.metrics import bleu_score
 import dataset
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+import util
 
 EOS_IDX = 2
 
@@ -34,11 +35,19 @@ def evaluate(tokenizer, model, dataset, criterion, args):
                 sequence = [1]
                 for t in range(len(y[i])): 
                     output, hidden, logits = model.generate(torch.tensor([[input_token]]).to(args.device), hidden)
-                    topv, topi = logits.topk(1)
-                    if topi.item() == EOS_IDX: 
+                    if t > len(y[i])/2:
+                        topv, topi = logits.topk(1)
+                        topi = topi.item()
+                    else:
+                        topv, topi = logits.topk(3)
+                        prediction_output = topi.squeeze().cpu().detach().numpy()
+                        topi = np.random.choice(prediction_output)
+                    #topi = topi.item()
+                    #scores = torch.nn.functional.softmax(topi.squeeze(), dim=0)
+                    if topi == EOS_IDX: 
                         break
-                    sequence.append(topi.item())
-                    input_token = topi.item()
+                    sequence.append(topi)
+                    input_token = topi
                 sequence = sequence[1:]
                 ref_1 = copy.deepcopy(list(y[i]))
                 ref_1.remove(1)
