@@ -31,7 +31,7 @@ class EarlyStopper:
         self.best_bleu = np.NINF
 
     def early_stop(self, bleu_score):
-        if bleu_score > self.best_bleu:
+        if bleu_score >= self.best_bleu:
             self.best_bleu = bleu_score
             self.counter = 0
         elif bleu_score < (self.best_bleu + self.min_delta):
@@ -51,3 +51,11 @@ class EarlyStopper:
                 return True
         return False
     '''
+
+def collate_fn_decode(data):
+    hidden_states, explanation, explanation_2, explanation_3 = zip(*data)
+    return hidden_states, explanation, explanation_2, explanation_3
+
+def collate_fn_aqua_decode(data):
+    hidden_states, rationale = zip(*data)
+    return hidden_states, rationale

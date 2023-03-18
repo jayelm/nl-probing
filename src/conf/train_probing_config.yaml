@@ -31,4 +31,5 @@ evaluate_every: 2
 multi_run: 1
 patience: 7
 max_epochs: 100
-custom_string: halfrandom2-random-tensor
+model_name_short: basic_probe
+custom_string: halfrandom2

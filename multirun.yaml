@@ -112,14 +112,11 @@ hydra:
     hydra:
     - hydra.mode=MULTIRUN
     task:
-    - learning_rate=0.0005
-    - lstm_hidden_size=1536
-    - layer=9
-    - multi_run=1
+    - layer=8
   job:
     name: train
     chdir: null
-    override_dirname: layer=9,learning_rate=0.0005,lstm_hidden_size=1536,multi_run=1
+    override_dirname: layer=8
     id: ???
     num: ???
     config_name: train_probing_config
@@ -170,11 +167,12 @@ batch_size: 64
 device: cuda
 learning_rate: 0.0005
 lstm_hidden_size: 1536
-layer: 9
+layer: 8
 plot_every: 2
 print_every: 2
 evaluate_every: 2
 multi_run: 1
 patience: 7
 max_epochs: 100
-custom_string: halfrandom2-random-tensor
+model_name_short: basic_probe
+custom_string: halfrandom2

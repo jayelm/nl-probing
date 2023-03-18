@@ -1,4 +1,5 @@
 from torch import nn
+import torch
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
@@ -17,8 +18,10 @@ class lstm_probing(nn.Module):
         self.h_projection = nn.Linear(in_features=self.hidden_size, out_features=self.hidden_size, bias=False)
         self.c_projection = nn.Linear(in_features=self.hidden_size, out_features=self.hidden_size, bias=False)
 
-        self.dropout = nn.Dropout(p=0.3)
+        self.dropout = nn.Dropout(p=0.2)
         self.embedding = nn.Embedding(self.input_size, self.lstm_hidden_size)
+        #self.post_embed_cnn = nn.Conv1d(in_channels=lstm_hidden_size, out_channels=lstm_hidden_size,
+        #                                kernel_size=2, padding='same')
         self.lstm = nn.LSTM(input_size = self.lstm_hidden_size, hidden_size=self.hidden_size, bias=True, batch_first=True)
         self.linear = nn.Linear(self.hidden_size, self.output_size)           
 
@@ -26,8 +29,11 @@ class lstm_probing(nn.Module):
         inputs = y_input[:, :-1]  # Feed in tokens at time t. We don't need to feed in the last token since we don't predict afterwards.
         targets = y_input[:, 1:]  # Predict tokens at time t+1
         predict_lengths = seq_lengths.cpu() - 1
-
-        embedded = self.dropout(self.embedding(inputs))  # (B, seq_len, hidden_size)
+        
+        input = self.embedding(inputs)# (B, seq_len, hidden_size)
+        #input = torch.permute(input, (0, 2, 1))
+        #input = torch.permute(self.post_embed_cnn(input), (0, 2, 1))
+        embedded = self.dropout(input)  
         packed_input = pack_padded_sequence(embedded, predict_lengths, batch_first=True, enforce_sorted=False)
         packed_output, _ = self.lstm(packed_input, encoder_hidden_states)
 

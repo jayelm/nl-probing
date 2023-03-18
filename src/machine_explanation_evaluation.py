@@ -18,7 +18,15 @@ parser.add_argument("-dp", "--Datapath", help = "Data Path")
 tokenizer = AutoTokenizer.from_pretrained('bert-base-cased')
 
 def get_dataset(path, split):
-    dataset = pd.read_pickle(path)
+    #dataset = pd.read_pickle(path)
+    file1 = open(path, 'r')
+    Lines = file1.readlines()
+    dataset = []
+    for line in Lines:
+        line = line[7:]
+        line = line[:-3]
+        line_list = line.split("', '")
+        dataset.append(line_list)
     string_dataset = [' '.join(record).encode('ascii', 'ignore').decode("utf-8") for record in dataset]
     tokenized_dataset = [tokenizer(sent, padding='max_length')['input_ids'] for sent in string_dataset]
     return tokenized_dataset
