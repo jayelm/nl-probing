@@ -3,7 +3,74 @@
 
 from datasets import DatasetDict, load_dataset
 from omegaconf import DictConfig
-from transformers import PreTrainedTokenizer
+from transformers import PreTrainedTokenizer, AutoTokenizer
+import h5py
+
+def load_esnli_explanation(args: DictConfig, tokenizer: PreTrainedTokenizer) -> DatasetDict:
+    datasets = load_dataset(args.data.dataset_name, args.data.dataset_config_name)
+    '''
+    datasets['train'] = datasets['train'].select(range(100))
+    datasets['validation'] = datasets['validation'].select(range(100))
+    datasets['test'] = datasets['test'].select(range(100))
+    '''
+    def tokenize_fn(examples):
+        """Use the tokenizer to tokenize the explanations.
+
+        - "input_ids" corresponding to the tokenized explanation, separated by a [SEP] token.
+        - "token_type_ids" which indicates which of the tokens in "input_ids"
+            correspond to explanations.
+        """
+        explanation1_features = tokenizer(
+            examples["explanation_1"],
+        )
+        explanation2_features = tokenizer(
+            examples["explanation_2"],
+        )
+        explanation3_features = tokenizer(
+            examples["explanation_3"],
+        )
+        input_ids = [1, *explanation1_features['input_ids'], 2]
+        return {
+            "input_ids": input_ids, 
+            "explanation2": [*explanation2_features['input_ids']],
+            "explanation3": [*explanation3_features['input_ids']]
+        }
+
+    datasets = datasets.map(
+        tokenize_fn,
+        desc="Tokenizing",
+        remove_columns=datasets["train"].column_names,
+    )
+    return datasets
+
+def load_aqua_rat_rationale(args: DictConfig, tokenizer: PreTrainedTokenizer) -> DatasetDict:
+    datasets = load_dataset(args.data.dataset_name, args.data.dataset_config_name)
+    '''
+    datasets['train'] = datasets['train'].select(range(100))
+    datasets['validation'] = datasets['validation'].select(range(100))
+    datasets['test'] = datasets['test'].select(range(100))
+    '''
+    def tokenize_fn(examples):
+        """Use the tokenizer to tokenize the explanations.
+
+        - "input_ids" corresponding to the tokenized explanation, separated by a [SEP] token.
+        - "token_type_ids" which indicates which of the tokens in "input_ids"
+            correspond to explanations.
+        """
+        rationale_features = tokenizer(
+            examples["rationale"],
+        )
+        input_ids = [1, *rationale_features['input_ids'], 2]
+        return {
+            "input_ids": input_ids
+        }
+
+    datasets = datasets.map(
+        tokenize_fn,
+        desc="Tokenizing",
+        remove_columns=datasets["train"].column_names,
+    )
+    return datasets
 
 
 def load_snli(args: DictConfig, tokenizer: PreTrainedTokenizer) -> DatasetDict:
@@ -40,8 +107,23 @@ def load_snli(args: DictConfig, tokenizer: PreTrainedTokenizer) -> DatasetDict:
     return datasets
 
 
+def load_encoder_states(args: DictConfig, split):
+    hf = h5py.File(args.encoder_states, "r")
+    dataset = hf[split][:]
+    #ind = list(range(0, 100))
+    #dataset = hf[split][:][ind]
+    hf.close()
+    return dataset
+
+def load_explanation(args: DictConfig, tokenizer: AutoTokenizer) -> DatasetDict:
+    if "esnli" in args.data.dataset_name:
+        return load_esnli_explanation(args, tokenizer)
+    elif "aqua_rat" in args.data.dataset_name:
+        return load_aqua_rat_rationale(args, tokenizer)
+
 def load(args: DictConfig, tokenizer: PreTrainedTokenizer) -> DatasetDict:
     if "snli" in args.data.dataset_name:
         return load_snli(args, tokenizer)
     else:
         raise NotImplementedError(f"{args.data=}")
+
